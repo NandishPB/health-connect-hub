@@ -8,6 +8,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Simple root route so visiting http://localhost:4000/ shows a friendly message
+app.get('/', (req, res) => {
+  res.send('ChikitsaVigyan backend running. Use /health or POST /api/seed for dev actions.');
+});
+
 app.get('/health', async (req, res) => {
   try {
     const result = await pool.query('SELECT 1');
