@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, User, Mail, Phone, Lock, Heart, Building2, Stethoscope, Droplets, ArrowLeft, CheckCircle } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -52,6 +52,7 @@ const Auth = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -80,7 +81,26 @@ const Auth = () => {
         : 'Your account has been created. Please check your email to verify.',
     });
 
+    // Persist a simple auth token + user info so the rest of the app can detect signed-in state.
+    try {
+      const user = {
+        name: formData.name || formData.email,
+        email: formData.email,
+        role: selectedRole,
+      };
+
+      // This is a placeholder token for demo. Replace with real token from backend.
+      localStorage.setItem('authToken', 'demo-token');
+      localStorage.setItem('authUser', JSON.stringify(user));
+    } catch (err) {
+      // ignore storage errors
+    }
+
     setIsLoading(false);
+
+    // If a redirect param exists, follow it; otherwise go to home
+    const redirect = searchParams.get('redirect') || '/';
+    navigate(redirect, { replace: true });
   };
 
   const RoleConfig = roleConfig[selectedRole];
