@@ -83,8 +83,9 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- Prescriptions and items
-INSERT INTO prescriptions (id, patient_id, patient_id, doctor_id, doctor_id, hospital_id, diagnosis, created_at)
-VALUES ('pres1','patient1','patient1','doc1','doc1','1','Viral Fever with throat infection','2024-11-25'::timestamptz)
+-- Corrected: only include each column once
+INSERT INTO prescriptions (id, patient_id, doctor_id, hospital_id, diagnosis, created_at)
+VALUES ('pres1','patient1','doc1','1','Viral Fever with throat infection','2024-11-25'::timestamptz)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO prescription_items (id, prescription_id, medicine_name, dosage, frequency, duration, instructions)

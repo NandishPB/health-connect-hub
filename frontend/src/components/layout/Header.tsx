@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, X, Heart, Hospital, User, LogIn, Droplets, Stethoscope, Pill } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -14,6 +14,19 @@ const navigation = [
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+
+  useEffect(() => {
+    try {
+      const s = localStorage.getItem('authUser');
+      if (s) setUser(JSON.parse(s));
+      else setUser(null);
+    } catch (e) {
+      setUser(null);
+    }
+  }, [location.pathname]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
@@ -53,18 +66,41 @@ export function Header() {
 
         {/* Desktop Actions */}
         <div className="hidden md:flex md:items-center md:gap-3">
-          <Link to="/auth">
-            <Button variant="ghost" size="sm">
-              <LogIn className="h-4 w-4" />
-              Login
-            </Button>
-          </Link>
-          <Link to="/auth?mode=register">
-            <Button size="sm">
-              <User className="h-4 w-4" />
-              Register
-            </Button>
-          </Link>
+          {user ? (
+            <>
+              <Button variant="ghost" size="sm">
+                <User className="h-4 w-4" />
+                {user.name}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  localStorage.removeItem('authToken');
+                  localStorage.removeItem('authUser');
+                  setUser(null);
+                  navigate('/', { replace: true });
+                }}
+              >
+                Logout
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link to="/auth">
+                <Button variant="ghost" size="sm">
+                  <LogIn className="h-4 w-4" />
+                  Login
+                </Button>
+              </Link>
+              <Link to="/auth?mode=register">
+                <Button size="sm">
+                  <User className="h-4 w-4" />
+                  Register
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile menu button */}
