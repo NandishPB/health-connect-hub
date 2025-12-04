@@ -8,6 +8,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Routes
+const authRoutes = require('./routes/auth');
+const prescriptionRoutes = require('./routes/prescriptions');
+const bloodRequestRoutes = require('./routes/bloodRequests');
+const appointmentRoutes = require('./routes/appointments');
+
+app.use('/api/auth', authRoutes);
+app.use('/api/prescriptions', prescriptionRoutes);
+app.use('/api/blood-requests', bloodRequestRoutes);
+app.use('/api/appointments', appointmentRoutes);
+
 // Simple root route so visiting http://localhost:4000/ shows a friendly message
 app.get('/', (req, res) => {
   res.send('ChikitsaVigyan backend running. Use /health or POST /api/seed for dev actions.');

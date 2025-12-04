@@ -1,16 +1,42 @@
-import { useParams, Link } from 'react-router-dom';
+import { useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Star, MapPin, Phone, Mail, Globe, Clock, Calendar, Tag, User, ArrowLeft, CheckCircle } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { mockHospitals, mockOffers, mockDoctors } from '@/lib/mock-data';
+import { AppointmentDialog } from '@/components/AppointmentDialog';
+import { useToast } from '@/hooks/use-toast';
 
 const HospitalDetail = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string | undefined>();
+  const [selectedDoctorName, setSelectedDoctorName] = useState<string | undefined>();
+  
   const hospital = mockHospitals.find(h => h.id === id);
   const offers = mockOffers.filter(o => o.hospitalId === id && o.isActive);
   const doctors = mockDoctors.filter(d => d.hospitalId === id && d.isActive);
+
+  const handleBookAppointment = (doctorId?: string, doctorName?: string) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      toast({
+        title: 'Login Required',
+        description: 'Please login to book an appointment.',
+        variant: 'destructive',
+      });
+      navigate('/auth?mode=register&role=patient&redirect=' + encodeURIComponent(window.location.pathname));
+      return;
+    }
+
+    setSelectedDoctorId(doctorId);
+    setSelectedDoctorName(doctorName);
+    setAppointmentDialogOpen(true);
+  };
 
   if (!hospital) {
     return (
@@ -114,7 +140,12 @@ const HospitalDetail = () => {
                           {doctor.experience && (
                             <p className="text-xs text-primary mt-1">{doctor.experience} years experience</p>
                           )}
-                          <Button variant="outline" size="sm" className="mt-3 gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="mt-3 gap-2"
+                            onClick={() => handleBookAppointment(doctor.userId || doctor.id, doctor.name)}
+                          >
                             <Calendar className="h-3 w-3" />
                             Book Appointment
                           </Button>
@@ -211,11 +242,19 @@ const HospitalDetail = () => {
                 )}
 
                 <div className="border-t pt-4 mt-4">
-                  <Button variant="hero" className="w-full gap-2">
+                  <Button 
+                    variant="hero" 
+                    className="w-full gap-2"
+                    onClick={() => handleBookAppointment()}
+                  >
                     <Calendar className="h-4 w-4" />
                     Book Appointment
                   </Button>
-                  <Button variant="outline" className="w-full mt-2 gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="w-full mt-2 gap-2"
+                    onClick={() => window.open(`tel:${hospital.phone}`)}
+                  >
                     <Phone className="h-4 w-4" />
                     Call Now
                   </Button>
@@ -236,6 +275,18 @@ const HospitalDetail = () => {
           </div>
         </div>
       </div>
+
+      {/* Appointment Dialog */}
+      {hospital && (
+        <AppointmentDialog
+          open={appointmentDialogOpen}
+          onOpenChange={setAppointmentDialogOpen}
+          hospitalId={hospital.id}
+          hospitalName={hospital.name}
+          doctorId={selectedDoctorId}
+          doctorName={selectedDoctorName}
+        />
+      )}
     </MainLayout>
   );
 };
