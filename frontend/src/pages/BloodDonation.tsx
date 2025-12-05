@@ -1,13 +1,15 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Clock, MapPin, Phone, Droplets, AlertTriangle, Filter, Search, Heart, Plus, Users, CheckCircle } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { mockBloodRequests, mockDonors, bloodGroups, getBloodGroupVariant, getUrgencyVariant } from '@/lib/mock-data';
+import { bloodGroups, getBloodGroupVariant, getUrgencyVariant } from '@/lib/mock-data';
 import { BloodGroup } from '@/types';
+import { bloodRequestsAPI, type BloodRequest } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 function formatTimeLeft(date: Date) {
   const now = new Date();
@@ -24,19 +26,102 @@ function formatTimeLeft(date: Date) {
 const BloodDonation = () => {
   const [selectedBloodGroup, setSelectedBloodGroup] = useState<BloodGroup | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [bloodRequests, setBloodRequests] = useState<BloodRequest[]>([]);
+  const [stats, setStats] = useState({
+    activeRequests: 0,
+    availableDonors: 0,
+    livesSaved: 0,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [respondingTo, setRespondingTo] = useState<string | null>(null);
+  const { toast } = useToast();
+  const navigate = useNavigate();
 
-  const filteredRequests = mockBloodRequests.filter(request => {
-    const matchesBloodGroup = selectedBloodGroup === 'all' || request.bloodGroupRequired === selectedBloodGroup;
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        const [requestsData, statsData] = await Promise.all([
+          bloodRequestsAPI.getAll(),
+          bloodRequestsAPI.getStats(),
+        ]);
+        setBloodRequests(requestsData.requests);
+        setStats(statsData);
+      } catch (err: any) {
+        console.error('Failed to fetch blood requests:', err);
+        toast({
+          title: 'Failed to load blood requests',
+          description: err.message || 'Could not fetch blood requests.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [toast]);
+
+  const filteredRequests = bloodRequests.filter(request => {
+    const matchesBloodGroup = selectedBloodGroup === 'all' || request.blood_group_required === selectedBloodGroup;
     const matchesSearch = searchQuery === '' || 
-      request.hospitalName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      request.locationDescription.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesBloodGroup && matchesSearch && request.status === 'active';
+      (request.hospital_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (request.location_description || '').toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesBloodGroup && matchesSearch && request.status === 'ACTIVE';
   });
 
-  const stats = [
-    { icon: Droplets, value: mockBloodRequests.filter(r => r.status === 'active').length, label: 'Active Requests' },
-    { icon: Users, value: mockDonors.filter(d => d.availability === 'available').length, label: 'Available Donors' },
-    { icon: CheckCircle, value: mockBloodRequests.filter(r => r.status === 'fulfilled').length, label: 'Lives Saved' },
+  const handleDonateClick = async (requestId: string) => {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      toast({
+        title: 'Login Required',
+        description: 'Please login to respond to blood requests.',
+        variant: 'destructive',
+      });
+      navigate('/auth?mode=register&role=donor&redirect=/blood-donation');
+      return;
+    }
+
+    try {
+      setRespondingTo(requestId);
+      const response = await bloodRequestsAPI.respond(requestId);
+      toast({
+        title: 'Thank You!',
+        description: response.message,
+      });
+      // Refresh the requests to update responder count
+      const requestsData = await bloodRequestsAPI.getAll();
+      setBloodRequests(requestsData.requests);
+      // Refresh stats too
+      const statsData = await bloodRequestsAPI.getStats();
+      setStats(statsData);
+    } catch (err: any) {
+      const errorMessage = err.message || 'Could not submit your response.';
+      const isNotDonor = errorMessage.includes('Only registered donors') || errorMessage.includes('donor');
+      
+      toast({
+        title: 'Failed to respond',
+        description: isNotDonor 
+          ? 'You need to register as a donor first. Click "Become a Donor" to register.'
+          : errorMessage,
+        variant: 'destructive',
+      });
+      
+      // If user is not a donor, suggest they register
+      if (isNotDonor) {
+        setTimeout(() => {
+          navigate('/auth?mode=register&role=donor&redirect=/blood-donation');
+        }, 2000);
+      }
+    } finally {
+      setRespondingTo(null);
+    }
+  };
+
+  const displayStats = [
+    { icon: Droplets, value: stats.activeRequests, label: 'Active Requests' },
+    { icon: Users, value: stats.availableDonors, label: 'Available Donors' },
+    { icon: CheckCircle, value: stats.livesSaved, label: 'Lives Saved' },
   ];
 
   return (
@@ -51,13 +136,13 @@ const BloodDonation = () => {
             Register as a donor to get notified when your blood type is needed.
           </p>
           <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:justify-center">
-            <Link to="/auth?role=donor">
+            <Link to="/auth?mode=register&role=donor">
               <Button variant="secondary" size="lg" className="w-full sm:w-auto gap-2">
                 <Heart className="h-5 w-5" />
                 Become a Donor
               </Button>
             </Link>
-            <Link to="/auth?role=hospital">
+            <Link to="/auth?mode=register&role=hospital">
               <Button variant="outline" size="lg" className="w-full sm:w-auto gap-2 border-destructive-foreground/30 text-destructive-foreground hover:bg-destructive-foreground/10 hover:text-destructive-foreground">
                 <Plus className="h-5 w-5" />
                 Create Blood Request
@@ -71,7 +156,7 @@ const BloodDonation = () => {
       <section className="border-b bg-card py-8">
         <div className="container">
           <div className="grid grid-cols-3 gap-4 md:gap-8">
-            {stats.map((stat, index) => (
+            {displayStats.map((stat, index) => (
               <div key={index} className="text-center">
                 <div className="mb-2 flex justify-center">
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10 md:h-12 md:w-12">
@@ -136,68 +221,93 @@ const BloodDonation = () => {
           </div>
 
           {/* Requests Grid */}
-          {filteredRequests.length > 0 ? (
+          {isLoading ? (
+            <div className="text-center py-12">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+              <p className="mt-4 text-muted-foreground">Loading blood requests...</p>
+            </div>
+          ) : filteredRequests.length > 0 ? (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {filteredRequests.map((request, index) => (
-                <Card
-                  key={request.id}
-                  variant={request.urgencyLevel === 'critical' ? 'urgent' : 'elevated'}
-                  className="animate-slide-up"
-                  style={{ animationDelay: `${index * 0.05}s` }}
-                >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <Badge variant={getBloodGroupVariant(request.bloodGroupRequired)} className="text-lg px-4 py-1">
-                          {request.bloodGroupRequired}
-                        </Badge>
-                        <Badge variant={getUrgencyVariant(request.urgencyLevel) as any}>
-                          {request.urgencyLevel === 'critical' && (
-                            <AlertTriangle className="h-3 w-3 mr-1" />
-                          )}
-                          {request.urgencyLevel.charAt(0).toUpperCase() + request.urgencyLevel.slice(1)}
-                        </Badge>
+              {filteredRequests.map((request, index) => {
+                const urgencyLevel = request.urgency_level?.toLowerCase() || 'low';
+                const isCritical = urgencyLevel === 'critical';
+                return (
+                  <Card
+                    key={request.id}
+                    variant={isCritical ? 'urgent' : 'elevated'}
+                    className="animate-slide-up"
+                    style={{ animationDelay: `${index * 0.05}s` }}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <Badge variant={getBloodGroupVariant(request.blood_group_required as BloodGroup)} className="text-lg px-4 py-1">
+                            {request.blood_group_required}
+                          </Badge>
+                          <Badge variant={getUrgencyVariant(urgencyLevel) as any}>
+                            {isCritical && (
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                            )}
+                            {urgencyLevel.charAt(0).toUpperCase() + urgencyLevel.slice(1)}
+                          </Badge>
+                        </div>
+                        {request.responders_count && parseInt(request.responders_count) > 0 && (
+                          <Badge variant="success" className="gap-1">
+                            <Users className="h-3 w-3" />
+                            {request.responders_count}
+                          </Badge>
+                        )}
                       </div>
-                      {request.respondersCount && request.respondersCount > 0 && (
-                        <Badge variant="success" className="gap-1">
-                          <Users className="h-3 w-3" />
-                          {request.respondersCount}
-                        </Badge>
+                      <CardTitle className="text-base mt-3">{request.hospital_name || 'Unknown Hospital'}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <MapPin className="h-4 w-4 text-primary shrink-0" />
+                        <span>{request.location_description || 'Location not specified'}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Phone className="h-4 w-4 text-primary shrink-0" />
+                        <span>{request.contact_phone || 'Contact not available'}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm">
+                        <Clock className="h-4 w-4 text-warning shrink-0" />
+                        <span className={isCritical ? 'text-destructive font-semibold' : 'text-muted-foreground'}>
+                          {formatTimeLeft(new Date(request.needed_by))}
+                        </span>
+                      </div>
+                      {request.notes && (
+                        <p className="text-sm text-muted-foreground border-t pt-3 mt-3">
+                          {request.notes}
+                        </p>
                       )}
-                    </div>
-                    <CardTitle className="text-base mt-3">{request.hospitalName}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="h-4 w-4 text-primary shrink-0" />
-                      <span>{request.locationDescription}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Phone className="h-4 w-4 text-primary shrink-0" />
-                      <span>{request.contactPhone}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                      <Clock className="h-4 w-4 text-warning shrink-0" />
-                      <span className={request.urgencyLevel === 'critical' ? 'text-destructive font-semibold' : 'text-muted-foreground'}>
-                        {formatTimeLeft(request.neededBy)}
-                      </span>
-                    </div>
-                    {request.notes && (
-                      <p className="text-sm text-muted-foreground border-t pt-3 mt-3">
-                        {request.notes}
-                      </p>
-                    )}
-                  </CardContent>
-                  <CardFooter className="flex gap-2">
-                    <Button variant={request.urgencyLevel === 'critical' ? 'urgent' : 'default'} className="flex-1">
-                      I Can Donate
-                    </Button>
-                    <Button variant="outline" size="icon">
-                      <Phone className="h-4 w-4" />
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
+                    </CardContent>
+                    <CardFooter className="flex gap-2">
+                      <Button 
+                        variant={isCritical ? 'urgent' : 'default'} 
+                        className="flex-1"
+                        onClick={() => handleDonateClick(request.id)}
+                        disabled={respondingTo === request.id}
+                      >
+                        {respondingTo === request.id ? (
+                          <>
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2"></span>
+                            Responding...
+                          </>
+                        ) : (
+                          'I Can Donate'
+                        )}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="icon"
+                        onClick={() => window.open(`tel:${request.contact_phone}`)}
+                      >
+                        <Phone className="h-4 w-4" />
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                );
+              })}
             </div>
           ) : (
             <Card variant="flat" className="py-12 text-center">

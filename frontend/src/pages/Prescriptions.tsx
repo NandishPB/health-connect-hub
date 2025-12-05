@@ -1,25 +1,60 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, Pill, ShoppingCart, Calendar, User, Building2, Download, Eye, Clock, CheckCircle, Package, Truck, AlertCircle } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { mockPrescriptions } from '@/lib/mock-data';
+import { prescriptionsAPI, type Prescription } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 const Prescriptions = () => {
   const [selectedPrescription, setSelectedPrescription] = useState<string | null>(null);
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
-  // Mock order status for demo
-  const mockOrders = [
-    {
-      id: '1',
-      prescriptionId: '1',
-      status: 'out_for_delivery',
-      createdAt: new Date('2024-11-28'),
-      estimatedDelivery: new Date('2024-11-30'),
-    },
-  ];
+  // Read auth state from localStorage (same shape as Header)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('authUser');
+      if (stored) {
+        setUser(JSON.parse(stored));
+      } else {
+        setUser(null);
+      }
+    } catch {
+      setUser(null);
+    }
+  }, []);
+
+  // Fetch prescriptions when user is logged in
+  useEffect(() => {
+    const fetchPrescriptions = async () => {
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        const data = await prescriptionsAPI.getAll();
+        setPrescriptions(data.prescriptions);
+      } catch (err: any) {
+        console.error('Failed to fetch prescriptions:', err);
+        toast({
+          title: 'Failed to load prescriptions',
+          description: err.message || 'Could not fetch your prescriptions.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPrescriptions();
+  }, [user, toast]);
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { variant: any; label: string; icon: any }> = {
@@ -52,156 +87,194 @@ const Prescriptions = () => {
         </div>
       </section>
 
-      {/* Login Prompt */}
-      <section className="border-b bg-card py-8">
-        <div className="container">
-          <Card variant="info">
-            <CardContent className="flex flex-col items-center gap-4 p-6 text-center md:flex-row md:text-left">
-              <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-info/20 shrink-0">
-                <User className="h-7 w-7 text-info" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-foreground">Login to View Your Prescriptions</h3>
-                <p className="text-sm text-muted-foreground">
-                  Sign in to access your prescription history, order medicines, and track your orders.
-                </p>
-              </div>
-              <Link to="/auth">
-                <Button variant="info">Login / Register</Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
-      {/* Demo Prescriptions */}
-      <section className="py-8 md:py-12">
-        <div className="container">
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-foreground">Recent Prescriptions</h2>
-            <p className="text-sm text-muted-foreground">Demo prescriptions for preview</p>
+      {/* Login Prompt (only when not signed in) */}
+      {!user && (
+        <section className="border-b bg-card py-8">
+          <div className="container">
+            <Card variant="info">
+              <CardContent className="flex flex-col items-center gap-4 p-6 text-center md:flex-row md:text-left">
+                <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-info/20 shrink-0">
+                  <User className="h-7 w-7 text-info" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-foreground">Login to View Your Prescriptions</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Sign in to access your prescription history, order medicines, and track your orders.
+                  </p>
+                </div>
+                <Link to="/auth">
+                  <Button variant="info">Login / Register</Button>
+                </Link>
+              </CardContent>
+            </Card>
           </div>
+        </section>
+      )}
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            {mockPrescriptions.map((prescription) => {
-              const order = mockOrders.find(o => o.prescriptionId === prescription.id);
-              return (
-                <Card key={prescription.id} variant="elevated" className="overflow-hidden">
-                  <CardHeader className="bg-muted/30">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <CardTitle className="text-lg">{prescription.diagnosis}</CardTitle>
-                        <CardDescription className="mt-1">
-                          Prescribed on {prescription.createdAt.toLocaleDateString('en-IN', { 
-                            day: 'numeric', month: 'long', year: 'numeric' 
-                          })}
-                        </CardDescription>
-                      </div>
-                      {order && getStatusBadge(order.status)}
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-4">
-                    {/* Doctor & Hospital */}
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-primary" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Doctor</p>
-                          <p className="text-sm font-medium">{prescription.doctorName}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-primary" />
-                        <div>
-                          <p className="text-xs text-muted-foreground">Hospital</p>
-                          <p className="text-sm font-medium">{prescription.hospitalName}</p>
-                        </div>
-                      </div>
-                    </div>
+      {/* Prescriptions */}
+      {user && (
+        <section className="py-8 md:py-12">
+          <div className="container">
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold text-foreground">Recent Prescriptions</h2>
+              <p className="text-sm text-muted-foreground">
+                {prescriptions.length === 0 ? 'No prescriptions found' : `${prescriptions.length} prescription(s) found`}
+              </p>
+            </div>
 
-                    {/* Medicines */}
-                    <div>
-                      <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                        <Pill className="h-4 w-4 text-primary" />
-                        Prescribed Medicines
-                      </h4>
-                      <div className="space-y-2">
-                        {prescription.items.map((item) => (
-                          <div key={item.id} className="flex items-start justify-between gap-4 p-3 rounded-lg bg-muted/50">
-                            <div className="flex-1">
-                              <p className="font-medium text-foreground">{item.medicineName}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {item.dosage} • {item.frequency} • {item.duration}
-                              </p>
-                              {item.instructions && (
-                                <p className="text-xs text-muted-foreground mt-1">{item.instructions}</p>
-                              )}
+            {isLoading ? (
+              <div className="text-center py-12">
+                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-primary border-r-transparent"></div>
+                <p className="mt-4 text-muted-foreground">Loading prescriptions...</p>
+              </div>
+            ) : prescriptions.length === 0 ? (
+              <Card variant="elevated">
+                <CardContent className="py-12 text-center">
+                  <FileText className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Prescriptions Yet</h3>
+                  <p className="text-muted-foreground">Your prescriptions will appear here once they are created.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-6 lg:grid-cols-2">
+                {prescriptions.map((prescription) => {
+                  const handleOrderMedicines = async () => {
+                    try {
+                      await prescriptionsAPI.createOrder(prescription.id);
+                      toast({
+                        title: 'Order created',
+                        description: 'Your medicine order has been placed successfully.',
+                      });
+                      // Refresh prescriptions
+                      const data = await prescriptionsAPI.getAll();
+                      setPrescriptions(data.prescriptions);
+                    } catch (err: any) {
+                      toast({
+                        title: 'Failed to create order',
+                        description: err.message || 'Could not place order. Please try again.',
+                        variant: 'destructive',
+                      });
+                    }
+                  };
+
+                  return (
+                    <Card key={prescription.id} variant="elevated" className="overflow-hidden">
+                      <CardHeader className="bg-muted/30">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <CardTitle className="text-lg">{prescription.diagnosis}</CardTitle>
+                            <CardDescription className="mt-1">
+                              Prescribed on {new Date(prescription.createdAt).toLocaleDateString('en-IN', { 
+                                day: 'numeric', month: 'long', year: 'numeric' 
+                              })}
+                            </CardDescription>
+                          </div>
+                          {prescription.order && getStatusBadge(prescription.order.status)}
+                        </div>
+                      </CardHeader>
+                      <CardContent className="p-6 space-y-4">
+                        {/* Doctor & Hospital */}
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <div className="flex items-center gap-2">
+                            <User className="h-4 w-4 text-primary" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">Doctor</p>
+                              <p className="text-sm font-medium">{prescription.doctorName}</p>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Order Tracking */}
-                    {order && (
-                      <div className="border-t pt-4">
-                        <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                          <Truck className="h-4 w-4 text-warning" />
-                          Order Status
-                        </h4>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-muted-foreground">
-                              Ordered on {order.createdAt.toLocaleDateString('en-IN')}
-                            </p>
-                            <p className="text-sm font-medium text-foreground">
-                              Expected by {order.estimatedDelivery.toLocaleDateString('en-IN', {
-                                day: 'numeric', month: 'long'
-                              })}
-                            </p>
+                          <div className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4 text-primary" />
+                            <div>
+                              <p className="text-xs text-muted-foreground">Hospital</p>
+                              <p className="text-sm font-medium">{prescription.hospitalName}</p>
+                            </div>
                           </div>
-                          {getStatusBadge(order.status)}
                         </div>
-                        {/* Progress */}
-                        <div className="mt-4 flex items-center gap-1">
-                          {['pending', 'accepted', 'packed', 'out_for_delivery', 'delivered'].map((step, index) => {
-                            const steps = ['pending', 'accepted', 'packed', 'out_for_delivery', 'delivered'];
-                            const currentIndex = steps.indexOf(order.status);
-                            const isCompleted = index <= currentIndex;
-                            return (
-                              <div key={step} className="flex-1">
-                                <div className={`h-2 rounded-full transition-colors ${
-                                  isCompleted ? 'bg-success' : 'bg-muted'
-                                }`} />
+
+                        {/* Medicines */}
+                        <div>
+                          <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                            <Pill className="h-4 w-4 text-primary" />
+                            Prescribed Medicines
+                          </h4>
+                          <div className="space-y-2">
+                            {prescription.items.map((item) => (
+                              <div key={item.id} className="flex items-start justify-between gap-4 p-3 rounded-lg bg-muted/50">
+                                <div className="flex-1">
+                                  <p className="font-medium text-foreground">{item.medicineName}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {item.dosage} • {item.frequency} • {item.duration}
+                                  </p>
+                                  {item.instructions && (
+                                    <p className="text-xs text-muted-foreground mt-1">{item.instructions}</p>
+                                  )}
+                                </div>
                               </div>
-                            );
-                          })}
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </CardContent>
-                  <CardFooter className="bg-muted/30 gap-2">
-                    <Button variant="outline" className="flex-1 gap-2">
-                      <Eye className="h-4 w-4" />
-                      View Details
-                    </Button>
-                    <Button variant="outline" className="flex-1 gap-2">
-                      <Download className="h-4 w-4" />
-                      Download PDF
-                    </Button>
-                    {!order && (
-                      <Button variant="hero" className="flex-1 gap-2">
-                        <ShoppingCart className="h-4 w-4" />
-                        Order Medicines
-                      </Button>
-                    )}
-                  </CardFooter>
-                </Card>
-              );
-            })}
+
+                        {/* Order Tracking */}
+                        {prescription.order && (
+                          <div className="border-t pt-4">
+                            <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                              <Truck className="h-4 w-4 text-warning" />
+                              Order Status
+                            </h4>
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm text-muted-foreground">
+                                  Ordered on {new Date(prescription.order.createdAt).toLocaleDateString('en-IN')}
+                                </p>
+                              </div>
+                              {getStatusBadge(prescription.order.status)}
+                            </div>
+                            {/* Progress */}
+                            <div className="mt-4 flex items-center gap-1">
+                              {['pending', 'accepted', 'packed', 'out_for_delivery', 'delivered'].map((step, index) => {
+                                const steps = ['pending', 'accepted', 'packed', 'out_for_delivery', 'delivered'];
+                                const currentIndex = steps.indexOf(prescription.order!.status);
+                                const isCompleted = index <= currentIndex;
+                                return (
+                                  <div key={step} className="flex-1">
+                                    <div className={`h-2 rounded-full transition-colors ${
+                                      isCompleted ? 'bg-success' : 'bg-muted'
+                                    }`} />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                      <CardFooter className="bg-muted/30 gap-2">
+                        <Button variant="outline" className="flex-1 gap-2">
+                          <Eye className="h-4 w-4" />
+                          View Details
+                        </Button>
+                        <Button variant="outline" className="flex-1 gap-2">
+                          <Download className="h-4 w-4" />
+                          Download PDF
+                        </Button>
+                        {!prescription.order && (
+                          <Button 
+                            variant="hero" 
+                            className="flex-1 gap-2"
+                            onClick={handleOrderMedicines}
+                          >
+                            <ShoppingCart className="h-4 w-4" />
+                            Order Medicines
+                          </Button>
+                        )}
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* How It Works */}
       <section className="bg-muted/30 py-12 md:py-16">

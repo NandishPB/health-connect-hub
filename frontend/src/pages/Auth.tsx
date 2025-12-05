@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { authAPI } from '@/lib/api';
 
 type AuthMode = 'login' | 'register';
 type UserRole = 'patient' | 'donor' | 'doctor' | 'hospital';
@@ -71,36 +72,59 @@ const Auth = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    toast({
-      title: mode === 'login' ? 'Welcome back!' : 'Registration successful!',
-      description: mode === 'login' 
-        ? 'You have been logged in successfully.'
-        : 'Your account has been created. Please check your email to verify.',
-    });
-
-    // Persist a simple auth token + user info so the rest of the app can detect signed-in state.
     try {
-      const user = {
-        name: formData.name || formData.email,
-        email: formData.email,
-        role: selectedRole,
-      };
+      let response;
+      
+      if (mode === 'login') {
+        // Login
+        response = await authAPI.login(formData.email, formData.password);
+      } else {
+        // Register
+        if (formData.password !== formData.confirmPassword) {
+          toast({
+            title: 'Password mismatch',
+            description: 'Passwords do not match. Please try again.',
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          return;
+        }
 
-      // This is a placeholder token for demo. Replace with real token from backend.
-      localStorage.setItem('authToken', 'demo-token');
-      localStorage.setItem('authUser', JSON.stringify(user));
-    } catch (err) {
-      // ignore storage errors
+        response = await authAPI.register({
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          password: formData.password,
+          role: selectedRole,
+          bloodGroup: selectedRole === 'donor' ? formData.bloodGroup : undefined,
+          hospitalName: selectedRole === 'hospital' ? formData.hospitalName : undefined,
+          city: selectedRole === 'hospital' ? formData.city : undefined,
+        });
+      }
+
+      // Store token and user info
+      localStorage.setItem('authToken', response.token);
+      localStorage.setItem('authUser', JSON.stringify(response.user));
+
+      toast({
+        title: mode === 'login' ? 'Welcome back!' : 'Registration successful!',
+        description: mode === 'login' 
+          ? 'You have been logged in successfully.'
+          : 'Your account has been created successfully.',
+      });
+
+      // If a redirect param exists, follow it; otherwise go to home
+      const redirect = searchParams.get('redirect') || '/';
+      navigate(redirect, { replace: true });
+    } catch (err: any) {
+      toast({
+        title: mode === 'login' ? 'Login failed' : 'Registration failed',
+        description: err.message || 'An error occurred. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
-
-    // If a redirect param exists, follow it; otherwise go to home
-    const redirect = searchParams.get('redirect') || '/';
-    navigate(redirect, { replace: true });
   };
 
   const RoleConfig = roleConfig[selectedRole];

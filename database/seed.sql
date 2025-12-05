@@ -7,7 +7,7 @@ INSERT INTO specialties (id, name, description) VALUES
 ('2','Cardiology','Heart and cardiovascular system'),
 ('3','Pediatrics','Child healthcare'),
 ('4','Orthopedics','Bone and joint care'),
-('5','Gynecology',"Women's health"),
+('5','Gynecology','Women''s health'),
 ('6','Dermatology','Skin care'),
 ('7','Ophthalmology','Eye care'),
 ('8','ENT','Ear, nose, and throat'),
